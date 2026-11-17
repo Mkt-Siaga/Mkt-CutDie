@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Mkt-CutDie · Siaga</title>
+<link rel="icon" href="logo-siaga.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="login" class="login">
+  <form id="form-login" class="login-card" autocomplete="off">
+    <img src="logo-siaga.svg" alt="Grupo Siaga" class="login-logo">
+    <h1>Controle de Facas e Fichas</h1>
+    <p class="muted">Acesso restrito. Informe a senha para abrir o acervo.</p>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit" class="btn btn-primary" id="btn-entrar">Entrar</button>
+    <p id="login-erro" class="erro" role="alert"></p>
+  </form>
+</section>
+
+<!-- APP -->
+<div id="app" hidden>
+  <header class="top">
+    <img src="logo-siaga.svg" alt="Grupo Siaga" class="top-logo">
+    <div class="top-title">Controle de Facas e Fichas</div>
+    <nav class="tabs" role="tablist">
+      <button class="tab is-on" data-tab="consulta" role="tab">Consulta</button>
+      <button class="tab" data-tab="acervo" role="tab">Acervo</button>
+      <button class="tab" data-tab="facas" role="tab">Facas</button>
+    </nav>
+    <button id="btn-sair" class="btn btn-ghost">Sair</button>
+  </header>
+
+  <main class="wrap">
+    <!-- CONSULTA -->
+    <section id="tab-consulta" class="painel">
+      <div class="entrada">
+        <label for="skus" class="lbl">SKUs</label>
+        <textarea id="skus" rows="4" placeholder="Cole ou digite os códigos, um por linha ou separados por vírgula. Aceita código Siaga (H01NB00065), Durax (DX10152), Durabem (DM10201), EAN ou DUN."></textarea>
+        <div class="entrada-acoes">
+          <button id="btn-buscar" class="btn btn-primary">Buscar</button>
+          <button id="btn-limpar" class="btn btn-ghost">Limpar</button>
+          <span class="flex1"></span>
+          <button id="btn-baixar-facas" class="btn btn-ghost" disabled>Baixar todas as facas</button>
+        </div>
+      </div>
+      <div id="resumo" class="resumo"></div>
+      <div id="resultados" class="cards"></div>
+    </section>
+
+    <!-- ACERVO -->
+    <section id="tab-acervo" class="painel" hidden>
+      <div class="kpis" id="kpis"></div>
+      <div class="filtros">
+        <input id="filtro" type="search" placeholder="Filtrar por código, descrição, família…">
+        <select id="filtro-faca">
+          <option value="">Todos</option>
+          <option value="com">Com faca</option>
+          <option value="sem">Sem faca</option>
+        </select>
+      </div>
+      <div class="tabela-wrap"><table class="tabela" id="tabela"></table></div>
+    </section>
+
+    <!-- FACAS -->
+    <section id="tab-facas" class="painel" hidden>
+      <div class="tabela-wrap"><table class="tabela" id="tabela-facas"></table></div>
+    </section>
+  </main>
+</div>
+
+<!-- VISUALIZADOR -->
+<dialog id="viewer" class="viewer">
+  <div class="viewer-bar">
+    <strong id="viewer-titulo"></strong>
+    <span class="flex1"></span>
+    <button id="viewer-imprimir" class="btn btn-primary" hidden>Imprimir / salvar PDF</button>
+    <a id="viewer-baixar" class="btn btn-primary" hidden>Baixar</a>
+    <button id="viewer-fechar" class="btn btn-ghost">Fechar</button>
+  </div>
+  <div id="viewer-corpo" class="viewer-corpo"></div>
+</dialog>
+
+<div id="area-impressao"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

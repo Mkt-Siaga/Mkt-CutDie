@@ -9,7 +9,7 @@ Todo o conteúdo fica em `v/` cifrado com AES-256-GCM. A chave só é liberada c
 As fontes ficam na máquina de quem mantém o sistema, em `_fonte/`, que não vai para o repositório:
 
 - `_fonte/facas/`: PDFs das facas
-- `_fonte/fichas/`: fichas em PDF já diagramadas
+- fichas em PDF (Durax, Siaga e WhiteLabel) de toda a linha de iluminação, geradas fora deste repositório e lidas pelo build
 - `_fonte/img/`: imagens por família
 - `_fonte/SENHA.txt` e `_fonte/chave-dados.bin`: senha e chave de dados
 

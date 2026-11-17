@@ -111,7 +111,7 @@
     if (it.durax) cods.push(`<span class="cod">${esc(it.durax)}</span>`);
     if (it.durabem) cods.push(`<span class="cod">${esc(it.durabem)}</span>`);
     if (it.ean) cods.push(`<span class="cod">EAN ${esc(it.ean)}</span>`);
-    const pdfs = it.fichasPdf.map(f => `<button class="btn btn-ghost btn-sm" data-pdf="${f.id}" data-titulo="Ficha ${esc(f.marca)} · ${esc(it.durax || it.siaga)}">PDF ${esc(f.marca)}</button>`).join('');
+    const pdfs = it.fichasPdf.map(f => `<button class="btn btn-ghost btn-sm" data-pdf="${f.id}" data-titulo="Ficha ${esc(f.marca)} · ${esc(f.marca === 'Durax' ? it.durax : it.siaga)}">PDF ${esc(f.marca)}</button>`).join('');
     return `<article class="card">
       <div class="foto"><img data-img="${esc(it.siaga)}" alt=""></div>
       <div>

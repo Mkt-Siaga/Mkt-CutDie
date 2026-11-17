@@ -165,9 +165,71 @@
     </article>`;
   }
 
+  // ---------------- importar planilha (.xlsx / .csv / .txt) ----------------
+  // .xlsx é um zip de XMLs: lê o diretório central e descompacta com DecompressionStream (sem biblioteca externa)
+  async function textosXlsx(buf) {
+    const u = new Uint8Array(buf), dv = new DataView(buf);
+    let e = u.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error('não é xlsx');
+    const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true);
+    const arqs = {};
+    for (let i = 0; i < n; i++) {
+      const met = dv.getUint16(p + 10, true), tam = dv.getUint32(p + 20, true);
+      const ln = dv.getUint16(p + 28, true), lx = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      const nome = te.decode(u.subarray(p + 46, p + 46 + ln));
+      p += 46 + ln + lx + lc;
+      if (!/^xl\/(sharedStrings|worksheets\/sheet\d+)\.xml$/.test(nome)) continue;
+      const ini = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true);
+      const dados = u.subarray(ini, ini + tam);
+      arqs[nome] = met === 0 ? te.decode(dados)
+        : await new Response(new Blob([dados]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+    }
+    const xml = s => new DOMParser().parseFromString(s, 'application/xml');
+    const compart = arqs['xl/sharedStrings.xml'] ? [...xml(arqs['xl/sharedStrings.xml']).getElementsByTagName('si')].map(si => si.textContent) : [];
+    const out = [];
+    for (const [nome, s] of Object.entries(arqs)) {
+      if (!nome.includes('worksheets')) continue;
+      for (const c of xml(s).getElementsByTagName('c')) {
+        const v = c.getElementsByTagName('v')[0]?.textContent ?? c.getElementsByTagName('t')[0]?.textContent;
+        if (v == null) continue;
+        out.push(c.getAttribute('t') === 's' ? compart[+v] ?? '' : v);
+      }
+    }
+    return out;
+  }
+  async function importa(arquivo) {
+    const st = $('#importacao');
+    st.textContent = `Lendo ${arquivo.name}…`;
+    try {
+      const buf = await arquivo.arrayBuffer();
+      const textos = /\.xls[xm]$/i.test(arquivo.name) ? await textosXlsx(buf) : [te.decode(buf)];
+      const pedacos = textos.flatMap(t => String(t).split(/[\s,;|\t]+/)).map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+      const achados = [], vistos = new Set();
+      for (let s of pedacos) {
+        if (/^\d+(\.\d+)?E\+\d+$/i.test(s)) s = BigInt(Math.round(Number(s))).toString(); // EAN salvo como número científico
+        s = s.replace(/\.0$/, '').toUpperCase();
+        if (indice.has(s) && !vistos.has(s)) { vistos.add(s); achados.push(s); }
+      }
+      if (!achados.length) { st.innerHTML = `<span class="nao">Nenhum código conhecido em ${esc(arquivo.name)}.</span> Aceita Siaga, Durax, Durabem, EAN ou DUN em qualquer coluna.`; return; }
+      const atual = $('#skus').value.trim();
+      const jaTem = new Set(atual.toUpperCase().split(/[\s,;]+/));
+      $('#skus').value = [atual, ...achados.filter(c => !jaTem.has(c))].filter(Boolean).join('\n');
+      st.textContent = `${arquivo.name}: ${achados.length} código(s) reconhecido(s).`;
+      busca();
+    } catch (err) {
+      st.innerHTML = `<span class="nao">Não consegui ler ${esc(arquivo.name)}.</span> Use Excel .xlsx, CSV ou TXT (arquivos .xls antigos: salve como .xlsx).`;
+    } finally { $('#arquivo-skus').value = ''; }
+  }
+  $('#btn-importar').addEventListener('click', () => $('#arquivo-skus').click());
+  $('#arquivo-skus').addEventListener('change', e => { if (e.target.files[0]) importa(e.target.files[0]); });
+  const caixa = $('#skus');
+  caixa.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); caixa.classList.add('solta'); } });
+  caixa.addEventListener('dragleave', () => caixa.classList.remove('solta'));
+  caixa.addEventListener('drop', e => { if (e.dataTransfer.files[0]) { e.preventDefault(); caixa.classList.remove('solta'); importa(e.dataTransfer.files[0]); } });
+
   $('#btn-buscar').addEventListener('click', busca);
   $('#skus').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) busca(); });
-  $('#btn-limpar').addEventListener('click', () => { $('#skus').value = ''; busca(); $('#skus').focus(); });
+  $('#btn-limpar').addEventListener('click', () => { $('#skus').value = ''; $('#importacao').textContent = ''; busca(); $('#skus').focus(); });
   $('#btn-baixar-facas').addEventListener('click', async () => {
     const ids = [...new Set(ultimos.filter(i => i.faca).map(i => i.faca.id))];
     for (const id of ids) { await baixa(id); await new Promise(r => setTimeout(r, 400)); }

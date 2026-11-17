@@ -154,3 +154,6 @@ body { font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; col
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .filtros { flex-direction: column; }
 }
+
+/* arrastar planilha para a caixa de SKUs */
+textarea#skus.solta { outline: 2px dashed #F7A600; outline-offset: 2px; background: rgba(247,166,0,.06); }

@@ -45,11 +45,14 @@
         <div class="entrada-acoes">
           <button id="btn-buscar" class="btn btn-primary">Buscar</button>
           <button id="btn-limpar" class="btn btn-ghost">Limpar</button>
+          <button id="btn-importar" class="btn btn-ghost" title="Excel (.xlsx), CSV ou TXT. Os códigos podem estar em qualquer coluna. Também dá para arrastar o arquivo para a caixa.">Importar planilha</button>
+          <input id="arquivo-skus" type="file" accept=".xlsx,.xlsm,.csv,.txt,.tsv" hidden>
           <span class="flex1"></span>
           <button id="btn-baixar-facas" class="btn btn-ghost" disabled>Baixar todas as facas</button>
           <button id="btn-baixar-kits" class="btn btn-primary" disabled title="Um zip com uma pasta por SKU: fotos em alta, faca, fichas em PDF e dados do produto">Baixar kits de todos</button>
         </div>
       </div>
+      <div id="importacao" class="resumo"></div>
       <div id="resumo" class="resumo"></div>
       <div id="resultados" class="cards"></div>
     </section>

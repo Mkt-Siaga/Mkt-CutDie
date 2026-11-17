@@ -34,12 +34,41 @@
     const buf = new Uint8Array(await fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }));
     return crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.subarray(0, 12) }, chave, buf.subarray(12));
   }
+  // fotos em alta ficam em vf/ (só na hospedagem própria); o resto em v/
+  const caminhoDe = id => `${D.arquivos[id].dir || 'v'}/${id}.bin`;
   async function urlDe(id) {
     if (blobs.has(id)) return blobs.get(id);
     const meta = D.arquivos[id];
-    const u = URL.createObjectURL(new Blob([await decifra(`v/${id}.bin`)], { type: meta.tipo }));
+    const u = URL.createObjectURL(new Blob([await decifra(caminhoDe(id))], { type: meta.tipo }));
     blobs.set(id, u);
     return u;
+  }
+  const bytesDe = async id => new Uint8Array(await decifra(caminhoDe(id)));
+
+  // ---------------- zip (sem compressão: PNG/PDF já vêm comprimidos) ----------------
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  function zipBlob(arqs) { // arqs: [{nome, dados: Uint8Array}]
+    const enc = new TextEncoder(), partes = [], central = [];
+    const d = new Date(), hora = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+    const data = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    let pos = 0;
+    for (const a of arqs) {
+      const nome = enc.encode(a.nome), crc = crc32(a.dados), n = a.dados.length;
+      const h = new DataView(new ArrayBuffer(30));
+      [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, hora, 2], [12, data, 2], [14, crc, 4], [18, n, 4], [22, n, 4], [26, nome.length, 2], [28, 0, 2]]
+        .forEach(([o, v, s]) => s === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
+      const c = new DataView(new ArrayBuffer(46));
+      [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, hora, 2], [14, data, 2], [16, crc, 4], [20, n, 4], [24, n, 4], [28, nome.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, pos, 4]]
+        .forEach(([o, v, s]) => s === 4 ? c.setUint32(o, v, true) : c.setUint16(o, v, true));
+      partes.push(h, nome, a.dados); central.push(c, nome);
+      pos += 30 + nome.length + n;
+    }
+    const tam = central.reduce((s, p) => s + p.byteLength, 0);
+    const fim = new DataView(new ArrayBuffer(22));
+    [[0, 0x06054b50, 4], [8, arqs.length, 2], [10, arqs.length, 2], [12, tam, 4], [16, pos, 4]]
+      .forEach(([o, v, s]) => s === 4 ? fim.setUint32(o, v, true) : fim.setUint16(o, v, true));
+    return new Blob([...partes, ...central, fim], { type: 'application/zip' });
   }
 
   // ---------------- login ----------------
@@ -102,6 +131,7 @@
         (nao.length ? `<br><span class="nao">Não encontrado(s): ${nao.map(esc).join(', ')}</span>` : '')
       : '';
     $('#btn-baixar-facas').disabled = !comFaca;
+    $('#btn-baixar-kits').disabled = achados.length < 2;
     $('#resultados').innerHTML = achados.map(cardHtml).join('');
     achados.forEach(async it => { const img = document.querySelector(`[data-img="${it.siaga}"]`); if (img) img.src = await urlDe(it.img); });
   }
@@ -121,10 +151,14 @@
         <div class="meta" style="margin-top:4px">${it.faca
           ? `<span class="tag ok">Faca</span> ${esc(it.faca.nome)}`
           : `<span class="tag no">Sem faca</span> ${it.integral ? 'Painel plástico integral: caixa diferente, sem faca no repositório.' : 'Não há faca no repositório para este item.'}`}</div>
+        <div class="meta" style="margin-top:4px">${it.fotos?.length
+          ? `<span class="tag ok">Fotos</span> ${it.fotos.length} foto(s) em alta resolução`
+          : '<span class="tag no">Sem foto</span> Ainda não há foto em alta deste item.'}</div>
         ${/parciais|sem cadastro/.test(it.fonte) ? `<div class="aviso">Ficha com dados parciais (${esc(it.fonte)}).</div>` : ''}
       </div>
       <div class="acoes">
-        <div class="grupo"><button class="btn btn-primary btn-sm" data-ficha="${esc(it.siaga)}">Ficha técnica</button></div>
+        <div class="grupo"><button class="btn btn-primary btn-sm" data-kit="${esc(it.siaga)}" title="Zip com fotos em alta, faca, fichas em PDF e dados do produto">Baixar kit da embalagem</button></div>
+        <div class="grupo"><button class="btn btn-ghost btn-sm" data-ficha="${esc(it.siaga)}">Ficha técnica</button></div>
         ${it.faca ? `<div class="grupo"><button class="btn btn-ghost btn-sm" data-pdf="${it.faca.id}" data-titulo="${esc(it.faca.nome)}">Ver faca</button><button class="btn btn-ghost btn-sm" data-baixar="${it.faca.id}">Baixar faca</button></div>` : ''}
         ${pdfs ? `<div class="grupo">${pdfs}</div>` : ''}
       </div>
@@ -139,11 +173,63 @@
     for (const id of ids) { await baixa(id); await new Promise(r => setTimeout(r, 400)); }
   });
 
+  // ---------------- kit da embalagem ----------------
+  const pastaDe = it => [it.siaga, it.durax].filter(Boolean).join('-');
+  function dadosTxt(it) {
+    const l = (k, v) => v ? `${k.padEnd(22)}${v}` : null;
+    return [
+      `KIT DA EMBALAGEM · ${it.descricao}`, '',
+      l('Código Siaga', it.siaga), l('Código Durax', it.durax), l('Código Durabem', it.durabem),
+      l('EAN-13 (unidade)', it.ean), l('DUN-14 (master)', it.dun), '',
+      l('Família', it.familia), l('Potência', it.potencia), l('Fluxo luminoso', it.lumens), l('Temperatura de cor', luz(it)),
+      l('Cor do produto', it.corProduto), l('Material', it.material), l('Grau de proteção', it.ip), l('Tensão', it.tensao),
+      l('Fator de potência', it.fp), l('IRC (CRI)', it.cri), l('Dimerizável', it.dimerizavel), l('Garantia', it.garantia),
+      l('Validade', it.validade), l('Origem', it.origem), l('NCM', it.ncm), l('CEST', it.cest), '',
+      l('Tamanho do produto', it.tamanho), l('Caixa individual (mm)', it.caixaInd), l('Qtd. na master', it.qtdMaster),
+      l('Medidas da master', it.medidasMaster), l('Peso líquido master', it.pesoLiq), l('Peso bruto master', it.pesoBruto), '',
+      l('Faca', it.faca ? it.faca.nome : 'sem faca no repositório'), l('Fotos em alta', String(it.fotos?.length || 0)),
+      '', `Fonte: ${it.fonte}`, `Gerado em ${new Date().toLocaleString('pt-BR')} · Controle de Facas e Fichas · Grupo Siaga`,
+    ].filter(x => x !== null).join('\r\n');
+  }
+  let semFotosAviso = false;
+  async function arquivosDoKit(it, raiz) {
+    const arqs = [], enc = new TextEncoder();
+    const add = async (id, nome) => arqs.push({ nome: raiz + nome, dados: await bytesDe(id) });
+    for (const f of it.fotos || []) {
+      try { await add(f.id, 'fotos/' + D.arquivos[f.id].nome); } catch { semFotosAviso = true; }
+    }
+    if (it.faca) await add(it.faca.id, 'faca/' + D.arquivos[it.faca.id].nome);
+    for (const f of it.fichasPdf) await add(f.id, 'fichas/' + D.arquivos[f.id].nome);
+    arqs.push({ nome: raiz + 'dados-do-produto.txt', dados: enc.encode('﻿' + dadosTxt(it)) });
+    return arqs;
+  }
+  async function baixaKit(itens, botao) {
+    const txt = botao?.textContent;
+    semFotosAviso = false;
+    try {
+      const arqs = [];
+      for (const [i, it] of itens.entries()) {
+        if (botao) { botao.disabled = true; botao.textContent = `Montando… ${i + 1}/${itens.length}`; }
+        arqs.push(...await arquivosDoKit(it, itens.length > 1 ? pastaDe(it) + '/' : ''));
+      }
+      const nome = itens.length > 1 ? `kits-embalagem-${itens.length}-skus.zip` : `kit-embalagem-${pastaDe(itens[0])}.zip`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob(arqs)); a.download = nome;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      if (semFotosAviso) alert('As fotos em alta ficam só em sistema.siagacorp.com. O kit foi gerado sem as fotos.');
+    } catch (err) {
+      alert('Não foi possível montar o kit. Tente de novo.');
+    } finally { if (botao) { botao.disabled = false; botao.textContent = txt; } }
+  }
+  $('#btn-baixar-kits').addEventListener('click', e => baixaKit(ultimos, e.currentTarget));
+
   // delegação de cliques (cards, tabelas)
   document.addEventListener('click', async e => {
-    const b = e.target.closest('[data-ficha],[data-pdf],[data-baixar],[data-add]');
+    const b = e.target.closest('[data-ficha],[data-pdf],[data-baixar],[data-add],[data-kit]');
     if (!b) return;
-    if (b.dataset.ficha) abreFicha(indice.get(b.dataset.ficha.toUpperCase()));
+    if (b.dataset.kit) baixaKit([indice.get(b.dataset.kit.toUpperCase())], b);
+    else if (b.dataset.ficha) abreFicha(indice.get(b.dataset.ficha.toUpperCase()));
     else if (b.dataset.pdf) abrePdf(b.dataset.pdf, b.dataset.titulo);
     else if (b.dataset.baixar) baixa(b.dataset.baixar);
     else if (b.dataset.add) {
@@ -290,20 +376,21 @@
 
   // ---------------- acervo ----------------
   function montaAcervo() {
-    const n = D.itens.length, cf = D.itens.filter(i => i.faca).length;
-    $('#kpis').innerHTML = [[n, 'SKUs no acervo'], [cf, 'com faca'], [n - cf, 'sem faca'], [D.facas.length, 'facas no repositório']]
+    const n = D.itens.length, cf = D.itens.filter(i => i.faca).length, cfo = D.itens.filter(i => i.fotos?.length).length;
+    $('#kpis').innerHTML = [[n, 'SKUs no acervo'], [cf, 'com faca'], [n - cf, 'sem faca'], [cfo, 'com foto em alta'], [D.facas.length, 'facas no repositório']]
       .map(([v, l]) => `<div class="kpi"><b>${v}</b><span>${l}</span></div>`).join('');
     desenhaTabela();
   }
   function desenhaTabela() {
     const q = $('#filtro').value.trim().toUpperCase(), ff = $('#filtro-faca').value;
     const rows = D.itens.filter(it => (!q || [it.siaga, it.durax, it.durabem, it.ean, it.descricao, it.familia].join(' ').toUpperCase().includes(q))
-      && (!ff || (ff === 'com') === !!it.faca));
-    $('#tabela').innerHTML = `<thead><tr><th>Siaga</th><th>Durax</th><th>Descrição</th><th>Caixa ind.</th><th>Faca</th><th>PDFs</th><th></th></tr></thead><tbody>` +
+      && (!ff || (ff === 'com' ? !!it.faca : ff === 'sem' ? !it.faca : ff === 'foto' ? !!it.fotos?.length : !it.fotos?.length)));
+    $('#tabela').innerHTML = `<thead><tr><th>Siaga</th><th>Durax</th><th>Descrição</th><th>Caixa ind.</th><th>Faca</th><th>Fotos</th><th>PDFs</th><th></th></tr></thead><tbody>` +
       rows.map(it => `<tr>
         <td class="mono">${esc(it.siaga)}</td><td class="mono">${esc(it.durax || '—')}</td>
         <td>${esc(it.descricao)}</td><td class="mono">${esc(it.caixaInd || '—')}</td>
         <td>${it.faca ? `<span class="tag ok" title="${esc(it.faca.nome)}">Sim</span>` : '<span class="tag no">Não</span>'}</td>
+        <td>${it.fotos?.length ? `<span class="tag ok">${it.fotos.length}</span>` : '<span class="tag no">Não</span>'}</td>
         <td>${it.fichasPdf.length || ''}</td>
         <td><button class="btn btn-ghost btn-sm" data-add="${esc(it.siaga)}">+ Consulta</button></td></tr>`).join('') + '</tbody>';
   }
